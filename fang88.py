@@ -31,18 +31,18 @@ def ajax_post(result):
 		return None
 
 #获取分页的数据
-def get_otherpage(page, facetParams, pageState, headers, results):
+def get_otherpage(page, facetParams, pageState, headers, results, cookies):
 	#第一个接口
 	url = 'https://cn.lennar.com/Services/REST/Facets.svc/GetFacetResults'
 	pageState['pn'] = page
 	payload = json.dumps({'searchState':facetParams, 'pageState': pageState})
-	response = requests.request("POST", url, data=payload, headers=headers)
+	response = requests.request("POST", url, data=payload, headers=headers, cookies=cookies)
 
 	#第二个接口
 	url = "https://cn.lennar.com/Services/Rest/SearchMethods.svc/GetCommunityDetails"
 	pageState.update({"pt":"C","ic":19,"ss":0,"attr":"No    ne","ius":False})
 	payload = json.dumps({'facetResults': response.json()['fr'], 'pageState':pageState})
-	response = requests.request("POST", url, data=payload, headers=headers)
+	response = requests.request("POST", url, data=payload, headers=headers, cookies=cookies)
 	
 	#保存数据
 	for item in response.json():
@@ -57,6 +57,9 @@ def crawl_url(url):
 	results = []
 	driver = webdriver.PhantomJS(executable_path='/Users/apple/Downloads/phantomjs-2.1.1-macosx/bin/phantomjs')
 	driver.get(url)
+	cookies = {}
+	for cook in driver.get_cookies():
+		cookies[cook['name']]=cook['value']
 	selector = etree.HTML(driver.page_source.encode('utf-8'))
 	items = selector.xpath('//div[@class="comm-item clearfix"]')
 	for item in items:
@@ -67,28 +70,30 @@ def crawl_url(url):
 		#print(name)
 		results.append(name)
 	
-	facetParams = driver.execute_script("return facetContextJSON.params")
-	pageState = driver.execute_script("return pageState")
-	headers = {
-		'origin': "https://cn.lennar.com",
-		'user-agent': "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.115 Safari/537.36",
-		'content-type': "application/json; charset=UTF-8",
-		'accept': "application/json, text/javascript, */*; q=0.01",
-		'referer': url,
-		'accept-encoding': "gzip, deflate, br",
-		'accept-language': "zh-CN,zh;q=0.8,en;q=0.6",
-		'cookie': "BHISession=sid=b5ca8bf7-093f-4407-98e2-036391808fd4; ASP.NET_SessionId=yq4f42cveqhlvwh45jsaks12; sdsat_lennar_refdom=none (direct); _hjIncludedInSample=1; rl_visitor_history=7049adbb-7f08-463b-bdd3-f1039659f9f6; optimizelyEndUserId=oeu1500299531522r0.13042656023112675; optimizelySegments=%7B%222330241343%22%3A%22direct%22%2C%222351440127%22%3A%22gc%22%2C%222356570031%22%3A%22false%22%2C%222385820548%22%3A%22none%22%2C%224934141097%22%3A%22true%22%7D; optimizelyBuckets=%7B%7D; _uetsid=_uet24fa0388; DLUserProfile=c9015001-f82d-4bc3-bc80-33452fc073dd; sdsat_lennar_campaign=no campaign name; _ga=GA1.2.397504118.1500246126; _gid=GA1.2.1312573258.1500246126; icxid=1500246287565-1880807202851972; icxid=1500246287565-1880807202851972; 1=1; visitor_id294192=23738911; visitor_id294192-hash=b89f2855140d169e7eb51727218ab1e302acefd51d8d8edc4ea28e56a42bdfc747400469c8ae836b5b64cc4d0de1671da7b14fa6; caoPopInMode=max"
-	}
-	sleep(5)	
-	#通过xpath获取页数
-	pagenum = selector.xpath('//div[@class="sptop"]//span[@class="spnPager"]/text()')
-	if pagenum:
-		for page in range(2, int(pagenum[0].split(':')[-1].strip())+1):		
-			get_otherpage(page, facetParams, pageState, headers, results)
+	try:
+		facetParams = driver.execute_script("return facetContextJSON.params")
+		pageState = driver.execute_script("return pageState")
+		headers = {
+			'origin': "https://cn.lennar.com",
+			'user-agent': "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.115 Safari/537.36",
+			'content-type': "application/json; charset=UTF-8",
+			'accept': "application/json, text/javascript, */*; q=0.01",
+			'referer': url,
+			'accept-encoding': "gzip, deflate, br",
+			'accept-language': "zh-CN,zh;q=0.8,en;q=0.6"
+		}
+		sleep(5)	
+		#通过xpath获取页数
+		pagenum = selector.xpath('//div[@class="sptop"]//span[@class="spnPager"]/text()')
+		if pagenum:
+			for page in range(2, int(pagenum[0].split(':')[-1].strip())+1):		
+				get_otherpage(page, facetParams, pageState, headers, results, cookies)
+	except:
+		pass
+	finally:
+		driver.quit()
 	
-	driver.quit()
-	
-	print(results)
+	print('\n'.join(results))
 	#上传抓取结果，需要配置url与接口参数
 	#ajax_post(results)
 
